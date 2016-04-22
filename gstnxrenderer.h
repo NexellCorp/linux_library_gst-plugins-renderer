@@ -22,6 +22,11 @@
 #include <gst/gst.h>
 #include <gst/base/gstbasesink.h>
 
+#include <dp.h>
+#include <dp_common.h>
+
+#include "mm_types.h"
+
 G_BEGIN_DECLS
 
 #define GST_TYPE_NX_RENDERER \
@@ -40,8 +45,14 @@ G_BEGIN_DECLS
 typedef struct _GstNxRenderer GstNxRenderer;
 typedef struct _GstNxRendererClass GstNxRendererClass;
 
+#define MAX_BUFFER_COUNT	16
+
 struct _GstNxRenderer {
 	GstBaseSink element;
+
+	int drm_fd;
+	struct dp_device *dp_device;
+	struct dp_framebuffer *fb[MAX_BUFFER_COUNT];
 };
 
 struct _GstNxRendererClass {

@@ -1,5 +1,6 @@
 CFLAGS = -Wall -fPIC
 INCLUDES := -I../sysroot/include \
+	    -I../sysroot/include/libdrm \
 	    -I./ \
 	    -I../buildroot/output/staging/usr/include \
 	    -I../buildroot/output/staging/usr/lib/glib-2.0/include \
@@ -7,6 +8,7 @@ INCLUDES := -I../sysroot/include \
 	    -I../buildroot/output/staging/usr/include/gstreamer-1.0
 LDFLAGS := -L../sysroot/lib -L../buildroot/output/target/usr/lib
 LIBS := -lgstapp-1.0 -lgstallocators-1.0 -lgstbase-1.0 -lgmodule-2.0 -lgobject-2.0 -lglib-2.0
+LIBS += -lnx-drm-allocator -lnx-renderer -lkms -ldrm -ldrm_nexell
 
 CROSS_COMPILE := aarch64-linux-gnu-
 CC := $(CROSS_COMPILE)gcc
@@ -27,6 +29,7 @@ $(LIB_TARGET): $(OBJS)
 all: $(LIB_TARGET)
 
 install: $(LIB_TARGET)
+	cp mm_types.h ../sysroot/include
 	cp $^ ../sysroot/lib
 
 .PHONY: clean

@@ -20,7 +20,50 @@
 #include "config.h"
 #endif
 
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#include <xf86drm.h>
+#include <drm_fourcc.h>
+
 #include "gstnxrenderer.h"
+
+/* FIXME
+ * this define must be moved to nx-renderer library
+ */
+static const uint32_t dp_formats[] = {
+
+	/* 1 plane */
+	DRM_FORMAT_YUYV,
+	DRM_FORMAT_YVYU,
+	DRM_FORMAT_UYVY,
+	DRM_FORMAT_VYUY,
+
+	/* 2 plane */
+	DRM_FORMAT_NV12, /* NV12 : 2x2 subsampled Cr:Cb plane */
+	DRM_FORMAT_NV21, /* NV21 : 2x2 subsampled Cb:Cr plane */
+	DRM_FORMAT_NV16, /* NV16 : 2x1 subsampled Cr:Cb plane */
+	DRM_FORMAT_NV61, /* NV61 : 2x1 subsampled Cb:Cr plane */
+
+	/* 3 plane */
+	DRM_FORMAT_YUV420, /* YU12 : 2x2 subsampled Cb (1) and Cr (2) planes */
+	DRM_FORMAT_YVU420, /* YV12 : 2x2 subsampled Cr (1) and Cb (2) planes */
+	DRM_FORMAT_YUV422, /* YU16 : 2x1 subsampled Cb (1) and Cr (2) planes */
+	DRM_FORMAT_YVU422, /* YV16 : 2x1 subsampled Cr (1) and Cb (2) planes */
+	DRM_FORMAT_YUV444, /* YU24 : non-subsampled Cb (1) and Cr (2) planes */
+	DRM_FORMAT_YVU444, /* YV24 : non-subsampled Cr (1) and Cb (2) planes */
+
+	/* RGB 1 buffer */
+	DRM_FORMAT_RGB565,
+	DRM_FORMAT_BGR565,
+	DRM_FORMAT_RGB888,
+	DRM_FORMAT_BGR888,
+	DRM_FORMAT_ARGB8888,
+	DRM_FORMAT_ABGR8888,
+	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_XBGR8888,
+};
 
 static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE("sink",
 	GST_PAD_SINK,
@@ -99,17 +142,189 @@ static void gst_nx_renderer_class_init(GstNxRendererClass *klass)
 	GST_DEBUG("LEAVED");
 }
 
+static struct dp_device *dp_device_init(int fd)
+{
+	struct dp_device *device;
+	int err;
+
+	err = drmSetClientCap(fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1); 
+	if (err < 0)
+		GST_ERROR("drmSetClientCap() failed: %d %m\n", err);
+
+	device = dp_device_open(fd);
+	if (!device) {
+		GST_ERROR("fail : device open() %m\n");
+		return NULL;
+	}
+
+	return device;
+}
+
+/* FIXME: this function must be moved to nx-renderer library */
+static int choose_format(struct dp_plane *plane, int select)
+{
+	int format;
+	int size;
+
+	size = ARRAY_SIZE(dp_formats);
+
+	if (select > (size-1)) {
+		GST_ERROR("fail : not support format index (%d) over size %d\n",
+			  select, size);
+		return -EINVAL;
+	}
+	format = dp_formats[select];
+
+	if (!dp_plane_supports_format(plane, format)) {
+		GST_ERROR("fail : not support %s\n", dp_forcc_name(format));
+		return -EINVAL;
+	}
+
+	GST_DEBUG("format: %s\n", dp_forcc_name(format));
+	return format;
+}
+
+static struct dp_framebuffer *framebuffer_alloc(struct dp_device *device,
+						int format,
+						MMVideoBuffer *mm_buf)
+{
+	struct dp_framebuffer *fb;
+	int i;
+	uint32_t offset;
+	int err;
+	int gem;
+
+	fb = calloc(1, sizeof(*fb));
+	if (!fb) {
+		GST_ERROR("failed to alloc dp_framebuffer");
+		return NULL;
+	}
+
+	gem = import_gem_from_flink(device->fd, mm_buf->handle.gem[0]);
+	if (gem < 0) {
+		GST_ERROR("failed to import gem from flink(%d)",
+			  mm_buf->handle.gem[0]);
+		return NULL;
+	}
+
+	fb->device = device;
+	fb->width = mm_buf->width[0];
+	fb->height = mm_buf->height[0];
+	fb->format = format;
+
+	fb->seperated = mm_buf->handle_num > 1 ? true : false;
+	fb->planes = mm_buf->handle_num;
+
+	for (i = 0; i < mm_buf->handle_num; i++) {
+		fb->sizes[i] = mm_buf->size[i];
+	}
+
+	/* FIXME; currently supports only YUV420 format */
+	offset = 0;
+	for (i = 0; i < 3; i ++) {
+		/* fb->handles[i] = mm_buf->handle.gem[0]; */
+		fb->handles[i] = gem;
+		fb->pitches[i] = mm_buf->stride_width[i];
+		fb->ptrs[i] = NULL;
+		fb->offsets[i] = offset;
+		offset += mm_buf->stride_width[i] * mm_buf->stride_height[i];
+	}
+
+	err = dp_framebuffer_addfb2(fb);
+	if (err < 0) {
+		GST_ERROR("failed to addfb2");
+		dp_framebuffer_free(fb);
+		return NULL;
+	}
+
+	return fb;
+}
+
+static struct dp_framebuffer *dp_buffer_init(struct dp_device *device,
+					     int display_index,
+					     int plane_index,
+					     int op_format,
+					     MMVideoBuffer *mm_buf)
+{
+	struct dp_plane *plane;
+	int format;
+
+	plane = dp_device_find_plane_by_index(device, display_index,
+					      plane_index);
+	if (!plane) {
+		GST_ERROR("no overlay plane found for disp %d, plane %d",
+			  display_index, plane_index);
+		return NULL;
+	}
+
+	format = choose_format(plane, op_format);
+	if (format < 0) {
+		GST_ERROR("no matching format found for op_format %d",
+			  op_format);
+		return NULL;
+	}
+
+	return framebuffer_alloc(device, format, mm_buf);
+}
+
+static int dp_plane_update(struct dp_device *device, struct dp_framebuffer *fb,
+			   int display_index, int plane_index)
+{
+	struct dp_plane *plane;
+
+	plane = dp_device_find_plane_by_index(device, display_index,
+					      plane_index);
+	if (!plane) {
+		GST_ERROR("no overlay plane found for disp %d, plane %d",
+			  display_index, plane_index);
+		return -EINVAL;
+	}
+
+	/* TODO : source crop, dest position */
+	return dp_plane_set(plane, fb,
+			    0, 0, fb->width, fb->height,
+			    0, 0, fb->width, fb->height);
+}
+
 static void gst_nx_renderer_init(GstNxRenderer *me)
 {
+	int i;
 	GST_DEBUG("ENTERED");
 	GST_DEBUG_OBJECT(me, "init");
+
+	me->drm_fd = open("/dev/dri/card0", O_RDWR);
+	if (me->drm_fd < 0)
+		GST_ERROR_OBJECT(me, "failed to open drm device");
+
+	me->dp_device = dp_device_init(me->drm_fd);
+	if (!me->dp_device)
+		GST_ERROR_OBJECT(me, "failed to dp_device_init");
+
+	for (i = 0; i < MAX_BUFFER_COUNT; i++)
+		me->fb[i] = NULL;
+
 	gst_base_sink_set_sync(GST_BASE_SINK(me), DEFAULT_SYNC);
 	GST_DEBUG("LEAVED");
 }
 
 static void gst_nx_renderer_finalize(GObject *obj)
 {
+	int i;
+	GstNxRenderer *me;
+
+	me = GST_NX_RENDERER(obj);
+
 	GST_DEBUG("ENTERED");
+
+	for (i = 0; i < MAX_BUFFER_COUNT; i++)
+		if (me->fb[i])
+			dp_framebuffer_delfb2(me->fb[i]);
+
+	if (me->dp_device)
+		dp_device_close(me->dp_device);
+	if (me->drm_fd >= 0)
+		close(me->drm_fd);
+
 	GST_DEBUG_OBJECT(obj, "finalize");
 	G_OBJECT_CLASS(parent_class)->finalize(obj);
 	GST_DEBUG("LEAVED");
@@ -170,19 +385,61 @@ static GstFlowReturn gst_nx_renderer_preroll(GstBaseSink *bsink,
 static GstFlowReturn gst_nx_renderer_render(GstBaseSink *bsink, GstBuffer *buf)
 {
 	GstNxRenderer *me = GST_NX_RENDERER(bsink);
+	GstMemory *meta_block = NULL;
+	MMVideoBuffer *mm_buf = NULL;
 	GstMapInfo info;
+	GstFlowReturn ret = GST_FLOW_OK;
 
 	GST_OBJECT_LOCK(me);
 
 	GST_DEBUG_OBJECT(me, "render buffer");
 
-	gst_buffer_map(buf, &info, GST_MAP_READ);
-	gst_util_dump_mem(info.data, info.size);
-	gst_buffer_unmap(buf, &info);
+	/* gst_buffer_map(buf, &info, GST_MAP_READ); */
+	/* gst_util_dump_mem(info.data, info.size); */
+	/* gst_buffer_unmap(buf, &info); */
+
+	memset(&info, 0, sizeof(GstMapInfo));
+
+	meta_block = gst_buffer_peek_memory(buf, 0);
+	gst_memory_map(meta_block, &info, GST_MAP_READ);
+
+	mm_buf = (MMVideoBuffer *)info.data;
+	if (!mm_buf) {
+		GST_ERROR_OBJECT(me, "failed to get MMVideoBuffer!");
+	} else {
+		GST_DEBUG_OBJECT(me, "get MMVideoBuffer");
+		GST_DEBUG_OBJECT(me, "type: 0x%x, width: %d, height: %d, plane_num: %d, handle_num: %d, index: %d",
+				 mm_buf->type, mm_buf->width[0],
+				 mm_buf->height[0], mm_buf->plane_num,
+				 mm_buf->handle_num, mm_buf->buffer_index);
+
+		if (!me->fb[mm_buf->buffer_index]) {
+			struct dp_framebuffer *fb;
+
+			fb = dp_buffer_init(me->dp_device, 0, 0,
+					    8, /* FIXME: YUV420 */
+					    mm_buf);
+			if (!fb) {
+				GST_ERROR_OBJECT(me, "failed to dp_buffer_init for index %d",
+						 mm_buf->buffer_index);
+				ret = GST_FLOW_ERROR;
+			}
+			GST_DEBUG_OBJECT(me, "make fb for %d",
+					 mm_buf->buffer_index);
+
+			me->fb[mm_buf->buffer_index] = fb;
+		}
+
+		GST_DEBUG_OBJECT(me, "display fb %d", mm_buf->buffer_index);
+		dp_plane_update(me->dp_device, me->fb[mm_buf->buffer_index],
+				0, 0);
+	}
+
+	gst_memory_unmap(meta_block, &info);
 
 	GST_OBJECT_UNLOCK(me);
 
-	return GST_FLOW_OK;
+	return ret;
 }
 
 static gboolean gst_nx_renderer_query(GstBaseSink *bsink, GstQuery *query)
