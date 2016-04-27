@@ -19,13 +19,30 @@ AC_PROG_INSTALL
 
 
 # checks for Argument Enable
+
 AC_ARG_WITH(
-		[gst_path],
-		AS_HELP_STRING([--with-gst_path],[with a extra dependency path for gstreamer]),
-		[GST_PATH=$withval],
-		[GST_PATH=no]
+		[extrapath],
+		AS_HELP_STRING([--with-extrapath],[with a extra dependency path for gstreamer]),
+		[EXTRAPATH=$withval],
+		[EXTRAPATH=no]
 )
-AC_SUBST([GST_PATH])
+AC_SUBST([EXTRAPATH])
+
+AC_ARG_WITH(
+		[extrapath_lib],
+		AS_HELP_STRING([--with-extrapath_lib],[with a extra dependency lib path for gstreamer]),
+		[EXTRAPATH_LIB=$withval],
+		[EXTRAPATH_LIB=no]
+)
+AC_SUBST([EXTRAPATH_LIB])
+
+AC_ARG_WITH(
+		[extrapath_include],
+		AS_HELP_STRING([--with-extrapath_include],[with a extra dependency include path for gstreamer]),
+		[EXTRAPATH_INCLUDE=$withval],
+		[EXTRAPATH_INCLUDE=no]
+)
+AC_SUBST([EXTRAPATH_INCLUDE])
 
 # Initialize libtool
 LT_PREREQ([2.2])
