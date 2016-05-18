@@ -10,10 +10,10 @@ BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:	gstreamer1-devel
 BuildRequires:	glibc-devel
 BuildRequires:	gstreamer1-plugins-base-devel
-BuildRequires:	nx-renderer
-BuildRequires:	libdrm
-BuildRequires:	nx-drm-allocator
-BuildRequires:	nx-v4l2
+BuildRequires:	nx-renderer-devel
+BuildRequires:	libdrm-devel
+BuildRequires:	nx-drm-allocator-devel
+BuildRequires:	nx-v4l2-devel
 
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
