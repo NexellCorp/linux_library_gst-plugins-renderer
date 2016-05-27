@@ -19,6 +19,7 @@ libgstnxrenderer_la_SOURCES = \
 
 gstnxrendererincludedir = ${includedir}
 gstnxrendererinclude_HEADERS = \
-	gstnxrenderer.h
+	gstnxrenderer.h \
+	mm_types.h
 
 
