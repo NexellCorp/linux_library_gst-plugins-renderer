@@ -34,21 +34,23 @@ gstreamer plugin renderer (devel)
 %setup -q
 
 %build
-make
+autoreconf -v --install || exit 1
+%configure --with-extrapath=%{_prefix} --with-extrapath_lib=%{_libdir} \
+	--with-extrapath_include=%{_includedir}
+make %{?_smp_mflags}
 
 %postun -p /sbin/ldconfig
 
 %install
 rm -rf %{buildroot}
+make install DESTDIR=%{buildroot}
 
-mkdir -p %{buildroot}/usr/include
-cp %{_builddir}/%{name}-%{version}/mm_types.h %{buildroot}/usr/include
-
-mkdir -p %{buildroot}/usr/lib/gstreamer-1.0
-cp %{_builddir}/%{name}-%{version}/libgstnxrenderer.so  %{buildroot}/usr/lib/gstreamer-1.0
+find %{buildroot} -type f -name "*.la" -delete
 
 %files
-%attr (0644, root, root) %{_libdir}/gstreamer-1.0/libgstnxrenderer.so
+%{_libdir}/libgstnxrenderer.so
+%{_libdir}/libgstnxrenderer.so.*
 
 %files devel
-%attr (0644, root, root) %{_includedir}/mm_types.h
+%{_includedir}/mm_types.h
+%{_includedir}/gstnxrenderer.h
