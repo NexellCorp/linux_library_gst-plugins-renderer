@@ -49,9 +49,9 @@ make install DESTDIR=%{buildroot}
 find %{buildroot} -type f -name "*.la" -delete
 
 %files
-%{_libdir}/libgstnxrenderer.so
-%{_libdir}/libgstnxrenderer.so.*
+%{_libdir}/gstreamer-1.0/libgstnxrenderer.so
+%{_libdir}/gstreamer-1.0/libgstnxrenderer.so.*
 
 %files devel
-%{_includedir}/mm_types.h
-%{_includedir}/gstnxrenderer.h
+%{_includedir}/gstreamer-1.0/mm_types.h
+%{_includedir}/gstreamer-1.0/gstnxrenderer.h
