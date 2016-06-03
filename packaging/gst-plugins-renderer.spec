@@ -53,5 +53,5 @@ find %{buildroot} -type f -name "*.la" -delete
 %{_libdir}/gstreamer-1.0/libgstnxrenderer.so.*
 
 %files devel
-%{_includedir}/gstreamer-1.0/mm_types.h
-%{_includedir}/gstreamer-1.0/gstnxrenderer.h
+%{_includedir}/mm_types.h
+%{_includedir}/gstnxrenderer.h

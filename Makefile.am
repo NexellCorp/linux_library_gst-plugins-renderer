@@ -3,7 +3,6 @@ ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}
 AM_CFLAGS = \
 	$(WARN_CFLAGS) \
 	-I${includedir} \
-	-I${includedir}/${GST_PLUGIN_PATH} \
 	-I${includedir}/libdrm \
 	-I./ \
 	-I${EXTRAPATH_INCLUDE} \
@@ -19,7 +18,7 @@ libgstnxrenderer_la_LIBADD += -lnx_drm_allocator -lnx_renderer -lkms -ldrm -ldrm
 libgstnxrenderer_la_SOURCES = \
 	gstnxrenderer.c
 
-gstnxrendererincludedir = ${includedir}/${GST_PLUGIN_PATH}
+gstnxrendererincludedir = ${includedir}
 gstnxrendererinclude_HEADERS = \
 	gstnxrenderer.h \
 	mm_types.h
