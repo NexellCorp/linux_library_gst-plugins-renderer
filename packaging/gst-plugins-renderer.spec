@@ -54,4 +54,3 @@ find %{buildroot} -type f -name "*.la" -delete
 
 %files devel
 %{_includedir}/mm_types.h
-%{_includedir}/gstnxrenderer.h
