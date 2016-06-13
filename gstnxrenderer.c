@@ -27,6 +27,8 @@
 #include <xf86drm.h>
 #include <drm_fourcc.h>
 
+#include "nx-drm-allocator.h"
+
 #include "gstnxrenderer.h"
 
 /* FIXME
