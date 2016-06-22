@@ -1,6 +1,6 @@
 Name:    gst-plugins-renderer
 Version: 0.0.1
-Release: 1
+Release: 2
 License: Apache 2.0
 Summary: gstreamer plugin renderer
 Group: Development/Libraries
@@ -22,15 +22,6 @@ Requires(postun): /sbin/ldconfig
 %description
 gstreamer plugin renderer
 
-%package devel
-Summary: gstreamer plugin renderer
-Group: Development/Libraries
-License: Apache 2.0
-Requires: %{name} = %{version}-%{release}
-
-%description devel
-gstreamer plugin renderer (devel)
-
 %prep
 %setup -q
 
@@ -51,6 +42,3 @@ find %{buildroot} -type f -name "*.la" -delete
 %files
 %{_libdir}/gstreamer-1.0/libgstnxrenderer.so
 %{_libdir}/gstreamer-1.0/libgstnxrenderer.so.*
-
-%files devel
-%{_includedir}/mm_types.h

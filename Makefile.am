@@ -18,9 +18,3 @@ libgstnxrenderer_la_LIBADD = -lgstapp-1.0 -lgstallocators-1.0 -lgstbase-1.0 -lgm
 libgstnxrenderer_la_LIBADD += -lnx_drm_allocator -lnx_renderer -lkms -ldrm -ldrm_nexell
 libgstnxrenderer_la_SOURCES = \
 	gstnxrenderer.c
-
-gstnxrendererincludedir = ${includedir}
-gstnxrendererinclude_HEADERS = \
-	mm_types.h
-
-
