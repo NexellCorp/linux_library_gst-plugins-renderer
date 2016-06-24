@@ -143,13 +143,30 @@ static void gst_nx_renderer_class_init(GstNxRendererClass *klass)
 
 	GST_DEBUG("LEAVED");
 }
+static guint32
+_get_pixel_format(GstNxRenderer *me, guint32 mm_format)
+{
+	guint32 drm_format = -1;
+	GST_DEBUG_OBJECT(me, "mm_format = %d", mm_format);
+	switch(mm_format) {
+		case MM_PIXEL_FORMAT_YUYV:
+			drm_format = 0;//DRM_FORMAT_YUYV;
+			break;
+		case MM_PIXEL_FORMAT_I420:
+			drm_format = 8;//DRM_FORMAT_YUV420;
+		default:
+			break;
+	}
+	GST_DEBUG_OBJECT(me, "drm_format = %d", drm_format);
+	return drm_format;
+}
 
 static struct dp_device *dp_device_init(int fd)
 {
 	struct dp_device *device;
 	int err;
 
-	err = drmSetClientCap(fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1); 
+	err = drmSetClientCap(fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
 	if (err < 0)
 		GST_ERROR("drmSetClientCap() failed: %d %m\n", err);
 
@@ -223,7 +240,8 @@ static struct dp_framebuffer *framebuffer_alloc(struct dp_device *device,
 
 	/* FIXME; currently supports only YUV420 format */
 	offset = 0;
-	for (i = 0; i < 3; i ++) {
+	//for (i = 0; i < 3; i ++) {
+	for (i = 0; i < mm_buf->plane_num; i ++) {
 		/* fb->handles[i] = mm_buf->handle.gem[0]; */
 		fb->handles[i] = gem;
 		fb->pitches[i] = mm_buf->stride_width[i];
@@ -410,16 +428,21 @@ static GstFlowReturn gst_nx_renderer_render(GstBaseSink *bsink, GstBuffer *buf)
 		GST_ERROR_OBJECT(me, "failed to get MMVideoBuffer!");
 	} else {
 		GST_DEBUG_OBJECT(me, "get MMVideoBuffer");
-		GST_DEBUG_OBJECT(me, "type: 0x%x, width: %d, height: %d, plane_num: %d, handle_num: %d, index: %d",
-				 mm_buf->type, mm_buf->width[0],
-				 mm_buf->height[0], mm_buf->plane_num,
-				 mm_buf->handle_num, mm_buf->buffer_index);
+		GST_DEBUG_OBJECT(me,
+			"type: 0x%x, width: %d, height: %d, plane_num: %d, handle_num: %d, index: %d, format : %d",
+			mm_buf->type, mm_buf->width[0],
+			mm_buf->height[0], mm_buf->plane_num,
+			mm_buf->handle_num, mm_buf->buffer_index,
+			mm_buf->format);
 
 		if (!me->fb[mm_buf->buffer_index]) {
 			struct dp_framebuffer *fb;
+			guint32 format = -1;
 
+			format = _get_pixel_format(me, mm_buf->format);
+			GST_DEBUG_OBJECT(me, "format is [%d]", format);
 			fb = dp_buffer_init(me->dp_device, 0, 0,
-					    8, /* FIXME: YUV420 */
+					    format,
 					    mm_buf);
 			if (!fb) {
 				GST_ERROR_OBJECT(me, "failed to dp_buffer_init for index %d",
