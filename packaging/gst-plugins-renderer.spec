@@ -1,7 +1,7 @@
 Name:    gst-plugins-renderer
 Version: 0.0.1
 Release: 2
-License: Apache 2.0
+License: LGPLv2+
 Summary: gstreamer plugin renderer
 Group: Development/Libraries
 Source:  %{name}-%{version}.tar.gz
@@ -42,3 +42,4 @@ find %{buildroot} -type f -name "*.la" -delete
 %files
 %{_libdir}/gstreamer-1.0/libgstnxrenderer.so
 %{_libdir}/gstreamer-1.0/libgstnxrenderer.so.*
+%license LICENSE.LGPLv2+
