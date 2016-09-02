@@ -213,7 +213,7 @@ static struct dp_framebuffer *framebuffer_alloc(struct dp_device *device,
 	int err;
 	int gem;
 
-	fb = calloc(1, sizeof(*fb));
+	fb = calloc(1, sizeof(struct dp_framebuffer));
 	if (!fb) {
 		GST_ERROR("failed to alloc dp_framebuffer");
 		return NULL;
