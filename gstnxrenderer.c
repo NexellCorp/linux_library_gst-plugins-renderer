@@ -223,6 +223,7 @@ static struct dp_framebuffer *framebuffer_alloc(struct dp_device *device,
 	if (gem < 0) {
 		GST_ERROR("failed to import gem from flink(%d)",
 			  mm_buf->handle.gem[0]);
+		free(fb);
 		return NULL;
 	}
 
