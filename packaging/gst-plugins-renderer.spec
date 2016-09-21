@@ -1,5 +1,5 @@
 Name:    gst-plugins-renderer
-Version: 1.0.0
+Version: 1.0.1
 Release: 1
 License: LGPLv2+
 Summary: gstreamer plugin renderer
