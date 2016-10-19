@@ -213,7 +213,7 @@ static struct dp_framebuffer *framebuffer_alloc(struct dp_device *device,
 	int err;
 	int gem;
 
-	fb = calloc(1, sizeof(*fb));
+	fb = calloc(1, sizeof(struct dp_framebuffer));
 	if (!fb) {
 		GST_ERROR("failed to alloc dp_framebuffer");
 		return NULL;
@@ -223,6 +223,7 @@ static struct dp_framebuffer *framebuffer_alloc(struct dp_device *device,
 	if (gem < 0) {
 		GST_ERROR("failed to import gem from flink(%d)",
 			  mm_buf->handle.gem[0]);
+		free(fb);
 		return NULL;
 	}
 
@@ -448,6 +449,7 @@ static GstFlowReturn gst_nx_renderer_render(GstBaseSink *bsink, GstBuffer *buf)
 				GST_ERROR_OBJECT(me, "failed to dp_buffer_init for index %d",
 						 mm_buf->buffer_index);
 				ret = GST_FLOW_ERROR;
+				goto done;
 			}
 			GST_DEBUG_OBJECT(me, "make fb for %d",
 					 mm_buf->buffer_index);
@@ -456,10 +458,13 @@ static GstFlowReturn gst_nx_renderer_render(GstBaseSink *bsink, GstBuffer *buf)
 		}
 
 		GST_DEBUG_OBJECT(me, "display fb %d", mm_buf->buffer_index);
-		dp_plane_update(me->dp_device, me->fb[mm_buf->buffer_index],
+		if(me->dp_device) {
+			dp_plane_update(me->dp_device, me->fb[mm_buf->buffer_index],
 				0, 0);
+		}
 	}
 
+done:
 	gst_memory_unmap(meta_block, &info);
 
 	GST_OBJECT_UNLOCK(me);
