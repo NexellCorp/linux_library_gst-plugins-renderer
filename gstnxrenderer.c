@@ -223,7 +223,7 @@ static struct dp_framebuffer *framebuffer_alloc(struct dp_device *device,
 	if (gem < 0) {
 		GST_ERROR("failed to import gem from flink(%d)",
 			  mm_buf->handle.gem[0]);
-		free(fb);
+		dp_framebuffer_free(fb);
 		return NULL;
 	}
 
@@ -337,6 +337,7 @@ static void gst_nx_renderer_finalize(GObject *obj)
 
 	GST_DEBUG("ENTERED");
 
+	free_gem(me->drm_fd, me->fb[0]->handles[0]);
 	for (i = 0; i < MAX_BUFFER_COUNT; i++)
 		if (me->fb[i])
 			dp_framebuffer_delfb2(me->fb[i]);
