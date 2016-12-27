@@ -29,6 +29,9 @@ GST_PLUGIN_PATH=gstreamer-${GST_API_VERSION}
 AC_SUBST(GST_PLUGIN_PATH)
 AC_DEFINE_UNQUOTED(GST_PLUGIN_PATH, "$GST_PLUGIN_PATH", [GStreamer PLUGIN Path])
 
+PKG_PROG_PKG_CONFIG
+PKG_CHECK_MODULES([GLIB], [glib-2.0])
+
 AC_ARG_WITH(
 		[extrapath],
 		AS_HELP_STRING([--with-extrapath],[with a extra dependency path for gstreamer]),
