@@ -31,6 +31,9 @@
 
 #include "gstnxrenderer.h"
 
+#define NX_PLANE_TYPE_RGB       (0<<4)
+#define NX_PLANE_TYPE_VIDEO     (1<<4)
+#define NX_PLANE_TYPE_UNKNOWN   (0xFFFFFFF)
 /* FIXME
  * this define must be moved to nx-renderer library
  */
@@ -261,6 +264,132 @@ static struct dp_framebuffer *framebuffer_alloc(struct dp_device *device,
 	return fb;
 }
 
+/* type : DRM_PLANE_TYPE_OVERLAY | NX_PLANE_TYPE_VIDEO */
+int get_plane_index_by_type(struct dp_device *device, uint32_t port, uint32_t type)
+{
+	int i = 0, j = 0;
+	int ret = -1;
+	drmModeObjectPropertiesPtr props;
+	uint32_t plane_type = -1;
+	int find_idx = 0;
+	int prop_type = -1;
+
+	/* type overlay or primary or cursor */
+	int layer_type = type & 0x3;
+	/*	display_type video : 1 << 4, rgb : 0 << 4	*/
+	int display_type = type & 0xf0;
+
+	for (i = 0; i < device->num_planes; i++) {
+		props = drmModeObjectGetProperties(device->fd,
+					device->planes[i]->id,
+					DRM_MODE_OBJECT_PLANE);
+		if (!props)
+			return -ENODEV;
+
+		prop_type = -1;
+		plane_type = NX_PLANE_TYPE_VIDEO;
+
+		for (j = 0; j < props->count_props; j++) {
+			drmModePropertyPtr prop;
+
+			prop = drmModeGetProperty(device->fd, props->props[j]);
+			if (prop) {
+				DP_DBG("plane.%2d %d.%d [%s]\n",
+					device->planes[i]->id,
+					props->count_props,
+					j,
+					prop->name);
+
+				if (strcmp(prop->name, "type") == 0)
+					prop_type = (int)props->prop_values[j];
+
+				if (strcmp(prop->name, "alphablend") == 0)
+					plane_type = NX_PLANE_TYPE_RGB;
+
+				drmModeFreeProperty(prop);
+			}
+		}
+		drmModeFreeObjectProperties(props);
+
+		DP_DBG("prop type : %d, layer type : %d\n",
+				prop_type, layer_type);
+		DP_DBG("disp type : %d, plane type : %d\n",
+				display_type, plane_type);
+		DP_DBG("find idx : %d, port : %d\n\n",
+				find_idx, port);
+
+		if (prop_type == layer_type && display_type == plane_type
+				&& find_idx == port) {
+			ret = i;
+			break;
+		}
+
+		if (prop_type == layer_type && display_type == plane_type)
+			find_idx++;
+
+		if (find_idx > port)
+			break;
+	}
+
+	return ret;
+}
+
+int get_plane_prop_id_by_property_name(int drm_fd, uint32_t plane_id,
+		char *prop_name)
+{
+	int res = -1;
+	drmModeObjectPropertiesPtr props;
+	props = drmModeObjectGetProperties(drm_fd, plane_id,
+			DRM_MODE_OBJECT_PLANE);
+
+	if (props) {
+		int i;
+
+		for (i = 0; i < props->count_props; i++) {
+			drmModePropertyPtr this_prop;
+			this_prop = drmModeGetProperty(drm_fd, props->props[i]);
+
+			if (this_prop) {
+				DP_DBG("prop name : %s, prop id: %d, param prop id: %s\n",
+						this_prop->name,
+						this_prop->prop_id,
+						prop_name
+						);
+
+				if (!strncmp(this_prop->name, prop_name,
+							DRM_PROP_NAME_LEN)) {
+
+					res = this_prop->prop_id;
+
+					drmModeFreeProperty(this_prop);
+					break;
+				}
+				drmModeFreeProperty(this_prop);
+			}
+		}
+		drmModeFreeObjectProperties(props);
+	}
+
+	return res;
+}
+
+int set_priority_video_plane(struct dp_device *device, uint32_t plane_idx,
+		uint32_t set_idx)
+{
+	uint32_t plane_id = device->planes[plane_idx]->id;
+	uint32_t prop_id = get_plane_prop_id_by_property_name(device->fd,
+							plane_id,
+							"video-priority");
+	int res = -1;
+
+	res = drmModeObjectSetProperty(device->fd,
+			plane_id,
+			DRM_MODE_OBJECT_PLANE,
+			prop_id,
+			set_idx);
+
+	return res;
+}
 static struct dp_framebuffer *dp_buffer_init(struct dp_device *device,
 					     int display_index,
 					     int plane_index,
@@ -269,12 +398,18 @@ static struct dp_framebuffer *dp_buffer_init(struct dp_device *device,
 {
 	struct dp_plane *plane;
 	int format;
+	uint32_t video_type, video_index;
+	int32_t res;
 
-	plane = dp_device_find_plane_by_index(device, display_index,
-					      plane_index);
-	if (!plane) {
-		GST_ERROR("no overlay plane found for disp %d, plane %d",
-			  display_index, plane_index);
+	video_type = DRM_PLANE_TYPE_OVERLAY | NX_PLANE_TYPE_VIDEO;
+	video_index = get_plane_index_by_type(device, 0, video_type);
+	if (video_index < 0) {
+		DP_ERR("fail : not found matching layer\n");
+		return -1;
+	}
+	plane = device->planes[video_index];
+	if (res = set_priority_video_plane(device, video_index, 1)) {
+		DP_ERR("failed setting priority : %d\n", res);
 		return NULL;
 	}
 
@@ -292,15 +427,15 @@ static int dp_plane_update(struct dp_device *device, struct dp_framebuffer *fb,
 			   int display_index, int plane_index)
 {
 	struct dp_plane *plane;
+	uint32_t video_type, video_index;
 
-	plane = dp_device_find_plane_by_index(device, display_index,
-					      plane_index);
-	if (!plane) {
-		GST_ERROR("no overlay plane found for disp %d, plane %d",
-			  display_index, plane_index);
-		return -EINVAL;
+	video_type = DRM_PLANE_TYPE_OVERLAY | NX_PLANE_TYPE_VIDEO;
+	video_index = get_plane_index_by_type(device, 0, video_type);
+	if (video_index < 0) {
+		DP_ERR("fail : not found matching layer\n");
+		return -1;
 	}
-
+	plane = device->planes[video_index];
 	/* TODO : source crop, dest position */
 	return dp_plane_set(plane, fb,
 			    0, 0, fb->width, fb->height,
